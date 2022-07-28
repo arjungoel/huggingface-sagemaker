@@ -1,0 +1,113 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+  lambdaExecutionRoleName:
+    Type: String
+    Description: AWS Lambda Execution role name
+  SageMakerExecutionRoleName:
+    Type: String
+    Description: AWS SageMaker Execution role name
+  s3BucketArn:
+    Type: String
+    Description: Comma delimited list of s3 bucket Arn(s)
+  SageMakerNotebookInstanceName:
+    Type: String
+    Description: Name of the SageMaker Notebook Instance
+  InstanceRootAccess:
+    Type: String
+    AllowedValues:
+      - Enabled
+      - Disabled
+    Default: Enabled
+  NotebookInstanceType:
+    Type: String
+    Description: SageMaker Notebook Instance type
+
+
+Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref lambdaExecutionRoleName
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+  
+  SageMakerExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref SageMakerExecutionRoleName
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - sagemaker.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+
+  lambdaExecutionRoleIAMPolicy: 
+    Type: AWS::IAM::Policy
+    Properties: 
+      Roles:
+        - !Ref lambdaExecutionRoleName
+      PolicyName: !Sub ${lambdaExecutionRoleName}_execution_policy
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+            Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*
+          - Effect: Allow
+            Action:
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*:*
+          - Effect: Allow
+            Action:
+              - sagemaker:InvokeEndpoint
+            Resource: "*"
+  
+  SageMakerExecutionRoleIAMPolicy: 
+    Type: AWS::IAM::Policy
+    Properties: 
+      Roles:
+        - !Ref SageMakerExecutionRoleName
+      PolicyName: !Sub ${SageMakerExecutionRoleName}_execution_policy
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: Allow
+            Action:
+              - s3:ListBucket
+            Resource: !Split
+              - ","
+              - !Ref s3BucketArn
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource: !Split
+              - ","
+              - !Ref s3BucketArn
+  
+  SageMakerNotebookInstance:
+    Type: AWS::SageMaker::NotebookInstance
+    Properties: 
+      InstanceType: !Ref NotebookInstanceType
+      NotebookInstanceName: !Ref SageMakerNotebookInstanceName
+      RoleArn: !Ref SageMakerExecutionRoleName
+      RootAccess: !Ref InstanceRootAccess
